@@ -1,0 +1,203 @@
+(() => {
+  if (window.__smartClickCleanup) window.__smartClickCleanup();
+
+  let x = null, y = null;
+  let intervalId = null;
+  let intervalMs = 1000;
+  let failing = false;
+  let paused = false;
+
+  const style = document.createElement("style");
+  style.textContent = `
+    #__smartClickBox {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 2147483647;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      font: 12px system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      border-radius: 10px;
+      padding: 10px;
+      width: 220px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    #__smartClickHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    #__smartClickClose {
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0.7;
+    }
+    #__smartClickClose:hover {
+      opacity: 1;
+    }
+    #__smartClickBox input {
+      width: 100%;
+      box-sizing: border-box;
+      margin: 4px 0 6px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      border: none;
+      font-size: 12px;
+    }
+    #__smartClickBox button {
+      width: 100%;
+      padding: 6px;
+      margin-top: 6px;
+      border-radius: 6px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #__smartClickBox button.pause {
+      background: #64748b;
+    }
+    #__smartClickStatus {
+      margin-top: 6px;
+      font-size: 11px;
+      opacity: 0.85;
+      min-height: 14px;
+    }
+    html.__smartPick * { cursor: crosshair !important; }
+  `;
+  document.head.appendChild(style);
+
+  const box = document.createElement("div");
+  box.id = "__smartClickBox";
+  box.innerHTML = `
+    <div id="__smartClickHeader">
+      <strong>by xyrevex on discord</strong>
+      <div id="__smartClickClose">✕</div>
+    </div>
+    <label>Speed (ms)</label>
+    <input type="number" min="10" value="${intervalMs}">
+    <button class="pick">pick location</button>
+    <button class="pause">pause</button>
+    <div id="__smartClickStatus">waiting for position…</div>
+  `;
+  document.body.appendChild(box);
+
+  const speedInput = box.querySelector("input");
+  const pickButton = box.querySelector(".pick");
+  const pauseButton = box.querySelector(".pause");
+  const closeButton = box.querySelector("#__smartClickClose");
+  const status = box.querySelector("#__smartClickStatus");
+
+  const setStatus = (t) => status.textContent = t;
+
+  const stopClicking = () => {
+    if (intervalId) clearInterval(intervalId);
+    intervalId = null;
+  };
+
+  const startClicking = () => {
+    if (paused || x === null) return;
+    stopClicking();
+    intervalId = setInterval(() => {
+      const el = document.elementFromPoint(x, y);
+      if (!el) {
+        if (!failing) {
+          failing = true;
+          setStatus("can't click it, you probably changed the screen size or scrolled.");
+        }
+        return;
+      }
+      if (failing) {
+        failing = false;
+        setStatus(`Clicking at ${x}, ${y}`);
+      }
+      const opts = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: x,
+        clientY: y,
+        button: 0,
+        buttons: 1
+      };
+      ["pointerdown","mousedown","pointerup","mouseup","click"]
+        .forEach(t => el.dispatchEvent(new MouseEvent(t, opts)));
+    }, intervalMs);
+  };
+
+  const beginPick = () => {
+    stopClicking();
+    paused = true;
+    pauseButton.textContent = "Resume";
+    document.documentElement.classList.add("__smartPick");
+    setStatus("where you want to click");
+
+    const onClick = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      x = e.clientX;
+      y = e.clientY;
+
+      document.documentElement.classList.remove("__smartPick");
+      window.removeEventListener("click", onClick, true);
+
+      paused = false;
+      pauseButton.textContent = "pause";
+      setStatus(`Locked on at ${x}, ${y}`);
+      startClicking();
+    };
+
+    window.addEventListener("click", onClick, true);
+  };
+
+  speedInput.addEventListener("change", () => {
+    const v = Number(speedInput.value);
+    if (!Number.isFinite(v) || v < 1) {
+      setStatus("this warning is just for the idiots ngl.");
+      return;
+    }
+    intervalMs = v;
+    if (!paused && x !== null) {
+      startClicking();
+      setStatus(`Speed set to ${intervalMs} ms`);
+    }
+  });
+
+  pauseButton.addEventListener("click", () => {
+    if (paused) {
+      paused = false;
+      pauseButton.textContent = "pause";
+      setStatus(`Resumed at ${x}, ${y}`);
+      startClicking();
+    } else {
+      paused = true;
+      pauseButton.textContent = "resume";
+      stopClicking();
+      setStatus("Paused");
+    }
+  });
+
+  pickButton.addEventListener("click", beginPick);
+
+  const cleanup = () => {
+    stopClicking();
+    box.remove();
+    style.remove();
+    document.documentElement.classList.remove("__smartPick");
+    delete window.__smartClickCleanup;
+  };
+
+  closeButton.addEventListener("click", () => {
+    cleanup();
+    console.log("clicker closed.");
+  });
+
+  window.__smartClickCleanup = cleanup;
+
+  beginPick();
+})();
