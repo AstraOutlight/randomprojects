@@ -734,8 +734,8 @@ local H = ColorSequence.new{
     ColorSequenceKeypoint.new(1, W)
 }
 
-local basgui = Instance.new("GuiMain")
-basgui.Parent = game:GetService("Players").LocalPlayer.PlayerGui
+local basgui = Instance.new("ScreenGui")
+basgui.Parent = game:GetService("CoreGui")
 basgui.Name = "VISgui"
 local fullscreenz = Instance.new("Frame")
 fullscreenz.Parent = basgui
