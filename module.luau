@@ -2532,6 +2532,27 @@ return function(Context)
             physicalHead.RootPriority = -127
         end)
 
+        if physicalHumanoid and physicalHumanoid.Health > 0 then
+            local neck = physicalTorso:FindFirstChild("Neck")
+            if not (neck and neck:IsA("Motor6D") and neck.Part0 == physicalTorso and neck.Part1 == physicalHead) then
+                for _, joint in ipairs(physicalTorso:GetChildren()) do
+                    if joint:IsA("Motor6D") and joint.Part0 == physicalTorso and joint.Part1 == physicalHead then
+                        neck = joint
+                        break
+                    end
+                end
+                if not neck then
+                    neck = Instance.new("Motor6D")
+                    neck.Name = "Neck"
+                    neck.Part0 = physicalTorso
+                    neck.Part1 = physicalHead
+                    neck.C0 = CFrame.new(0, 1, 0)
+                    neck.C1 = CFrame.new(0, -0.5, 0)
+                    neck.Parent = physicalTorso
+                end
+            end
+        end
+
         local targetHeadCFrame = controllerHead.CFrame
         if type(Reanimate.ResolveBodyHideTargetCFrame) == "function" then
             targetHeadCFrame =
@@ -3409,11 +3430,39 @@ return function(Context)
                 else
                     task.delay(math.max(game:GetService("Players").RespawnTime + 8, 12), function()
                         if resetInFlight and backend.Rig == rig and rig.Parent then
+                            local physical = backend.RealCharacter
+                            local physicalHumanoid = physical and physical:FindFirstChildOfClass("Humanoid")
+                            local replacement = Player.Character
+                            if replacement and replacement ~= rig and replacement ~= physical then
+                                local replacementHumanoid = replacement:FindFirstChildOfClass("Humanoid")
+                                if replacementHumanoid and replacementHumanoid.Health > 0 then
+                                    pendingPhysicalCharacter = replacement
+                                    isolatePhysicalCharacter(replacement)
+                                    return
+                                end
+                            end
+                            if physicalHumanoid and physicalHumanoid.Health <= 0 then
+                                local retried = requestSingleRespawn(rig)
+                                if retried then
+                                    task.delay(math.max(game:GetService("Players").RespawnTime + 5, 9), function()
+                                        if resetInFlight and backend.Rig == rig then
+                                            resetInFlight = false
+                                            rebindInProgress = false
+                                            pendingPhysicalCharacter = nil
+                                            setRespawnPlaceholderActive(false)
+                                            warn("Gelatek: respawn request failed twice; physical character is dead")
+                                            Util.Notify("Gelatek reset failed: no new character spawned")
+                                        end
+                                    end)
+                                    return
+                                end
+                            end
                             resetInFlight = false
                             rebindInProgress = false
                             pendingPhysicalCharacter = nil
                             setRespawnPlaceholderActive(false)
-                            Util.Notify("Gelatek reset timed out; controller was kept")
+                            warn("Gelatek: reset timed out; no replacement physical character")
+                            Util.Notify("Gelatek reset failed: no replacement character")
                         end
                     end)
                 end
