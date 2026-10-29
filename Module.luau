@@ -2295,13 +2295,18 @@ return function(Context)
         -- One active joint owns Head. A second channel must not solve the
         -- same Torso/Head pair with a different pose.
         local replicated = Util.SetCharacterJointOffset(reference, cf)
-        -- This helper is used only by the guarded non-PD head path. The
-        -- hidden writer alone does not guarantee the local Motor6D pose.
-        -- Set the same transform locally without changing the shared R6 writer.
-        if reference:IsA("Motor6D") then
-            local c0, c1 = Util.GetCharacterJointFrames(reference)
+        if motor and motor.Parent and motor.Enabled then
+            local c0, c1 = Util.GetCharacterJointFrames(motor)
             if c0 and c1 then
-                reference.Transform = c0:Inverse() * cf * c1
+                local transform = c0:Inverse() * cf * c1
+                motor.Transform = transform
+                local axis, angle = transform:ToAxisAngle()
+                local setter = sethiddenproperty or sethiddenprop or set_hidden_property
+                if type(setter) == "function" then
+                    local okOffset = pcall(setter, motor, "ReplicateCurrentOffset6D", transform.Position)
+                    local okAngle = pcall(setter, motor, "ReplicateCurrentAngle6D", axis * angle)
+                    replicated = (okOffset and okAngle) or replicated
+                end
             end
         end
         return replicated
@@ -2976,18 +2981,7 @@ return function(Context)
                     local positionError =
                         (physicalPart.Position - targetCFrame.Position).Magnitude
 
-                    if backend.EffectivePermanentDeath == true
-                        and pair.Name == "Head"
-                        and not pair.IsAccessory
-                    then
-                        -- PD detaches the physical neck, so the non-PD
-                        -- CurrentAngle6D neck writer cannot animate this head.
-                        -- Drive the owned detached head from the controller's
-                        -- complete pose rather than correcting position only.
-                        pcall(function()
-                            physicalPart.CFrame = targetCFrame
-                        end)
-                    elseif options.DirectPositionCorrection == true then
+                    if options.DirectPositionCorrection == true then
                         -- Independent of Gelatek CFrame-vs-Align mode. This is a
                         -- positional safety writer, not a second rotation writer.
                         pcall(function()
